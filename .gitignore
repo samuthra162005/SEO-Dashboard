@@ -1,0 +1,24 @@
+
+# Private credentials
+.env
+.env.*
+!.env.example
+key.json
+**/key.json
+*credentials*.json
+*service-account*.json
+
+# Dependencies
+node_modules/
+
+# Local files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Backups
+*.bak
+*.backup

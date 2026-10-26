@@ -1,0 +1,322 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Client Management | Kanavu SEO Hub</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px;
+      font-family: Arial, sans-serif;
+      background: #f1efff;
+      color: #28164e;
+    }
+    main { max-width: 1100px; margin: auto; }
+    h1 { margin-bottom: 6px; }
+    .muted { color: #726989; }
+    .card {
+      background: white;
+      border: 1px solid #ddd8f7;
+      border-radius: 16px;
+      padding: 20px;
+      margin-top: 18px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    label { display: block; font-size: 13px; margin-bottom: 6px; }
+    input, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc5e7;
+      border-radius: 8px;
+      font: inherit;
+    }
+    button {
+      background: #5b2bb5;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+    button.secondary { background: #74698f; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #e8e4f4;
+      text-align: left;
+    }
+    .table-wrap { overflow-x: auto; }
+    .error { color: #b42318; }
+    .success { color: #16794f; }
+    a { color: #5b2bb5; }
+  </style>
+</head>
+<body>
+<main>
+ <a href="/">← Back to Dashboard</a>
+<span style="margin: 0 12px;">|</span>
+<a href="/#/clients">Existing Client Directory</a>
+  <h1>Client Management</h1>
+  <p class="muted">Manage clients stored in Neon PostgreSQL.</p>
+
+  <section class="card" id="loginCard">
+    <h2>Connect to Kanavu SEO Hub</h2>
+    <label for="token">Dashboard access token</label>
+    <input id="token" type="password" autocomplete="off">
+    <button id="connectBtn">Connect</button>
+    <p id="message" role="status"></p>
+  </section>
+
+  <div id="workspace" hidden>
+    <section class="card">
+      <h2 id="formTitle">Add Client</h2>
+      <form id="clientForm">
+        <div class="grid">
+          <div>
+            <label for="name">Client name *</label>
+            <input id="name" required maxlength="150">
+          </div>
+          <div>
+            <label for="website">Website</label>
+            <input id="website" type="url" placeholder="https://example.com">
+          </div>
+          <div>
+            <label for="director">Director</label>
+            <input id="director">
+          </div>
+          <div>
+            <label for="whatsapp_group">WhatsApp group</label>
+            <input id="whatsapp_group">
+          </div>
+          <div>
+            <label for="client_meeting">Client meeting</label>
+            <input id="client_meeting" placeholder="Monday 10:00 AM">
+          </div>
+          <div>
+            <label for="internal_meeting">Internal meeting</label>
+            <input id="internal_meeting" placeholder="Friday 3:00 PM">
+          </div>
+        </div>
+        <p>
+          <label for="notes">Notes</label>
+          <textarea id="notes" rows="3"></textarea>
+        </p>
+        <button type="submit" id="saveBtn">Add Client</button>
+        <button type="button" class="secondary" id="cancelBtn" hidden>
+          Cancel Edit
+        </button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Clients</h2>
+      <p id="status" role="status"></p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Website</th>
+              <th>Director</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="clientRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+'use strict';
+
+let accessToken = '';
+let clients = [];
+let editingId = null;
+
+const $ = id => document.getElementById(id);
+
+const fields = [
+  'name', 'website', 'director',
+  'whatsapp_group', 'client_meeting',
+  'internal_meeting', 'notes'
+];
+
+function showStatus(text, error = false) {
+  $('status').textContent = text;
+  $('status').className = error ? 'error' : 'success';
+}
+
+async function api(path, options = {}) {
+  const response = await fetch('/api/db/clients' + path, {
+    ...options,
+    headers: {
+      'x-token': accessToken,
+      ...(options.body ? {'Content-Type': 'application/json'} : {})
+    }
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.error || 'Request failed');
+  }
+
+  return result;
+}
+
+async function loadClients() {
+  clients = await api('/');
+  renderClients();
+}
+
+function renderClients() {
+  const tbody = $('clientRows');
+  tbody.replaceChildren();
+
+  for (const client of clients) {
+    const row = document.createElement('tr');
+
+    function cell(text) {
+      const td = document.createElement('td');
+      td.textContent = text ?? '';
+      row.appendChild(td);
+      return td;
+    }
+
+    cell(client.name);
+
+    const websiteCell = cell('');
+    if (client.website) {
+      const link = document.createElement('a');
+      link.href = client.website;
+      link.textContent = client.website;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      websiteCell.appendChild(link);
+    }
+
+    cell(client.director);
+    cell(client.archived ? 'Archived' : 'Active');
+
+    const actions = cell('');
+
+    const editButton = document.createElement('button');
+    editButton.textContent = 'Edit';
+    editButton.onclick = () => editClient(client.id);
+    actions.appendChild(editButton);
+
+    const archiveButton = document.createElement('button');
+    archiveButton.textContent = client.archived ? 'Restore' : 'Archive';
+    archiveButton.className = 'secondary';
+    archiveButton.style.marginLeft = '8px';
+    archiveButton.onclick = () => changeArchive(client);
+    actions.appendChild(archiveButton);
+
+    tbody.appendChild(row);
+  }
+}
+
+function resetForm() {
+  editingId = null;
+  $('clientForm').reset();
+  $('formTitle').textContent = 'Add Client';
+  $('saveBtn').textContent = 'Add Client';
+  $('cancelBtn').hidden = true;
+}
+
+function editClient(id) {
+  const client = clients.find(c => c.id === id);
+  if (!client) return;
+
+  editingId = id;
+  for (const field of fields) {
+    $(field).value = client[field] || '';
+  }
+
+  $('formTitle').textContent = 'Edit Client';
+  $('saveBtn').textContent = 'Save Changes';
+  $('cancelBtn').hidden = false;
+  window.scrollTo(0, 0);
+}
+
+async function changeArchive(client) {
+  const archived = !client.archived;
+  const action = archived ? 'archive' : 'restore';
+
+  if (!confirm(`Do you want to ${action} ${client.name}?`)) {
+    return;
+  }
+
+  try {
+    await api('/' + client.id + '/archive', {
+      method: 'PATCH',
+      body: JSON.stringify({archived})
+    });
+
+    await loadClients();
+    showStatus(client.name + ' ' + (archived ? 'archived' : 'restored'));
+  } catch (error) {
+    showStatus(error.message, true);
+  }
+}
+
+$('clientForm').addEventListener('submit', async event => {
+  event.preventDefault();
+
+  const data = {};
+  for (const field of fields) {
+    data[field] = $(field).value.trim();
+  }
+
+  try {
+    if (editingId === null) {
+      await api('/', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+      showStatus('Client added successfully');
+    } else {
+      await api('/' + editingId, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
+      showStatus('Client updated successfully');
+    }
+
+    resetForm();
+    await loadClients();
+  } catch (error) {
+    showStatus(error.message, true);
+  }
+});
+
+$('cancelBtn').onclick = resetForm;
+
+$('connectBtn').onclick = async () => {
+  accessToken = $('token').value.trim();
+
+  try {
+    await loadClients();
+    $('token').value = '';
+    $('loginCard').hidden = true;
+    $('workspace').hidden = false;
+    showStatus('Connected to Neon PostgreSQL');
+  } catch (error) {
+    $('message').textContent = error.message;
+    $('message').className = 'error';
+  }
+};
+</script>
+</body>
+</html>
