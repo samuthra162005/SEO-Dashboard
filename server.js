@@ -54,11 +54,17 @@ const PAGESPEED_KEY = process.env.PAGESPEED_KEY || '';
    GOOGLE SHEETS CONNECTION
 ========================================================= */
 
+const googleCredentials = process.env.GOOGLE_CREDENTIALS_JSON;
+
 const auth = new google.auth.GoogleAuth({
-  keyFile: path.resolve(
-    __dirname,
-    process.env.GOOGLE_KEY_FILE || 'key.json'
-  ),
+  ...(googleCredentials
+    ? { credentials: JSON.parse(googleCredentials) }
+    : {
+        keyFile: path.resolve(
+          __dirname,
+          process.env.GOOGLE_KEY_FILE || 'key.json'
+        )
+      }),
 
   scopes: [
     'https://www.googleapis.com/auth/spreadsheets.readonly'
